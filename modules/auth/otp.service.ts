@@ -38,14 +38,19 @@ export class OtpService {
       attempt_count: 0,
     });
 
-    return {
+    const response: Record<string, unknown> = {
       success: true,
       message: `OTP sent to +91 ${cleanPhone.slice(-10)}. Valid for 5 minutes.`,
       phone: cleanPhone,
       purpose,
       expires_in_seconds: 300,
-      dev_preview_code: rawCode,
     };
+
+    if (process.env.NODE_ENV !== 'production') {
+      response.dev_preview_code = rawCode;
+    }
+
+    return response;
   }
 
   static verifyOtp(phone: string, code: string, purpose: OtpPurpose) {

@@ -38,15 +38,19 @@ export class AuthService {
     primary_goal_exam_tag_id?: string;
     referred_by_user_id?: string;
   }) {
+    const isDevMode = process.env.NODE_ENV !== 'production';
     let phone: string | null = null;
     if (input.verification_token) {
       phone = OtpService.consumeVerificationToken(input.verification_token, 'login').phone;
     } else if (input.phone) {
+      if (!isDevMode) {
+        throw new AppError('Phone login requires a verified OTP token in production.', 401);
+      }
       phone = input.phone.trim().replace(/\D/g, '');
     }
 
     if (!phone && !input.google_id) {
-      throw new AppError('Either phone verification token or Google ID is required.', 400);
+      throw new AppError('Either a verified phone login token or Google ID is required.', 400);
     }
 
     let user = phone

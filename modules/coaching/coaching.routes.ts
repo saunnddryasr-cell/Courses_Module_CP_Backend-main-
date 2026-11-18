@@ -71,7 +71,7 @@ coachingRouter.get('/institutes/compare', (req: Request, res: Response) => {
     return;
   }
 
-  const matches = db.institutes.filter((i) => ids.includes(i.id) || ids.includes(i.slug));
+  const matches = db.institutes.filter((i) => i.is_active && i.operating_status !== 'permanently_closed' && (ids.includes(i.id) || ids.includes(i.slug)));
   const sanitized = maskInstitutesForPublic(matches).map((inst) => {
     const batches = db.institute_batches.filter((b) => b.institute_id === inst.id && !b.is_archived);
     return { ...inst, batches };
@@ -82,7 +82,7 @@ coachingRouter.get('/institutes/compare', (req: Request, res: Response) => {
 
 coachingRouter.get('/institutes/:slug', (req: Request, res: Response) => {
   const slug = req.params.slug;
-  const institute = db.institutes.find((i) => i.slug === slug || i.id === slug);
+  const institute = db.institutes.find((i) => i.is_active && i.operating_status !== 'permanently_closed' && (i.slug === slug || i.id === slug));
 
   if (!institute) {
     res.status(404).json({ error: 'Institute not found.' });

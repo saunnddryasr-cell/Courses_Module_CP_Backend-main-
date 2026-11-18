@@ -5,7 +5,7 @@
 import { Router, Request, Response } from 'express';
 import { OtpService } from './otp.service.js';
 import { AuthService } from './auth.service.js';
-import { optionalAuth } from './auth.middleware.js';
+import { requireAuth } from './auth.middleware.js';
 import { maskInstituteForPublic } from '../../shared/security/masking.js';
 
 export const authRouter = Router();
@@ -58,13 +58,20 @@ authRouter.post('/auth/login', (req: Request, res: Response) => {
     return;
   }
 
-  if (persona === 'admin_user') {
+  if (persona === 'admin_user' || (!persona && email && password)) {
     if (!email || !password) {
       res.status(400).json({ error: 'email and password required for admin login.' });
       return;
     }
     const sessionRes = AuthService.loginAdminUser({ email, password });
-    res.json(sessionRes);
+    res.json({
+      ...sessionRes,
+      user: {
+        id: sessionRes.admin_user.id,
+        email: sessionRes.admin_user.email,
+        role: sessionRes.admin_user.role,
+      },
+    });
     return;
   }
 
@@ -80,17 +87,19 @@ authRouter.post('/auth/login', (req: Request, res: Response) => {
   res.json(sessionRes);
 });
 
-authRouter.get('/auth/me', optionalAuth, (req: Request, res: Response) => {
-  if (!req.authSession) {
-    res.json({ authenticated: false, session: null });
-    return;
-  }
+authRouter.get('/auth/me', requireAuth, (req: Request, res: Response) => {
+  const session = req.authSession!;
+  const user = session.admin_user
+    ? { id: session.admin_user.id, email: session.admin_user.email, role: session.admin_user.role }
+    : session.user
+      ? { id: session.user.id, email: session.user.email, role: 'student' }
+      : { id: session.claim!.id, email: null, role: 'institute_admin' };
   res.json({
     authenticated: true,
-    persona: req.authSession.persona,
-    user: req.authSession.user,
-    institute: req.authSession.institute ? maskInstituteForPublic(req.authSession.institute) : undefined,
-    admin_user: req.authSession.admin_user,
+    persona: session.persona,
+    user,
+    institute: session.institute ? maskInstituteForPublic(session.institute) : undefined,
+    admin_user: session.admin_user,
   });
 });
 

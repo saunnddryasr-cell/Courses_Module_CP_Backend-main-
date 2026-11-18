@@ -78,6 +78,10 @@ export class DatabaseStore {
     this.seed();
   }
 
+  reset(): void {
+    this.seed();
+  }
+
   seed(): void {
     const now = new Date().toISOString();
 

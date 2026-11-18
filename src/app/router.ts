@@ -15,6 +15,8 @@ import { guidesRouter } from '../../modules/guides/guides.routes.js';
 import { calendarRouter } from '../../modules/exam-calendar/calendar.routes.js';
 import { learningPathsRouter } from '../../modules/learning-paths/learning-paths.routes.js';
 import { adminRouter } from '../../modules/admin/admin.routes.js';
+import { aggregatorRouter } from '../../modules/aggregator/aggregator.routes.js';
+import { aggregatorContractRouter } from '../../modules/aggregator/contract.routes.js';
 
 export const appRouter = Router();
 
@@ -31,3 +33,5 @@ appRouter.use(guidesRouter);
 appRouter.use(calendarRouter);
 appRouter.use(learningPathsRouter);
 appRouter.use(adminRouter);
+appRouter.use(aggregatorRouter);
+appRouter.use(aggregatorContractRouter);

@@ -8,6 +8,8 @@ import { appRouter } from './router.js';
 import { errorHandler } from './error-handler.js';
 import { requestLogger } from './middleware.js';
 import { db } from '../../shared/db/database.js';
+import { aggregatorDb } from '../../modules/aggregator/database.js';
+import { aggregatorScheduler } from '../../modules/aggregator/scheduler.js';
 
 export function createApp() {
   const app = express();
@@ -54,6 +56,7 @@ export function createApp() {
         'exam-calendar (Key dates timeline)',
         'learning-paths (Curated roadmaps)',
         'ingestion (Coursera, Udemy, NPTEL sync)',
+        'aggregator (source registry, normalized updates, drafts, publishing)',
         'notifications (Email, SMS, WhatsApp adapters)',
         'admin (Moderation queues, platform ops, RBAC)',
       ],
@@ -71,7 +74,9 @@ export function createApp() {
   return app;
 }
 
-export function startServer() {
+export async function startServer() {
+  await aggregatorDb.initialize();
+  aggregatorScheduler.start();
   const app = createApp();
   const PORT = Number(process.env.PORT) || 3000;
 
@@ -81,6 +86,27 @@ export function startServer() {
     console.log(` Health check: http://0.0.0.0:${PORT}/health`);
     console.log(`======================================================\n`);
   });
+
+  const shutdown = () => {
+    server.close((error) => {
+      if (error) {
+        console.error('Failed to close HTTP server cleanly:', error);
+        process.exitCode = 1;
+      }
+    });
+  };
+  const onClose = () => {
+    aggregatorScheduler.stop();
+    process.off('SIGINT', shutdown);
+    process.off('SIGTERM', shutdown);
+    aggregatorDb.close().catch((error: unknown) => {
+      console.error('Failed to close aggregator database cleanly:', error);
+      process.exitCode = 1;
+    });
+  };
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
+  server.once('close', onClose);
 
   return server;
 }

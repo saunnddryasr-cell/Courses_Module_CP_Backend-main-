@@ -103,6 +103,7 @@ Expected JSON response:
 │   ├── exam-calendar/     # National entrance & certification key dates timeline
 │   ├── learning-paths/    # Curated step-by-step career & exam learning sequences
 │   ├── ingestion/         # MOOC catalog sync engine (Coursera/Udemy/NPTEL) protecting manually overridden fields
+│   ├── aggregator/        # Persistent API/RSS update ingestion, deduplication, review, and publishing pipeline
 │   ├── notifications/     # Transactional email, SMS, and gated WhatsApp Business API adapter
 │   ├── integrations/      # Third-party integration config manager with encrypted credential masks
 │   ├── admin/             # Claims queue, review moderation, reports, and platform admin ops
@@ -344,3 +345,63 @@ To reset to a clean state anytime during testing:
 ```bash
 curl -X POST http://localhost:3000/api/admin/system/reset-db
 ```
+
+---
+
+## 7. Update Aggregator
+
+The update aggregator runs alongside the CoursePur API. Its tables are initialized from `modules/aggregator/schema.sql`.
+
+- For local development, leave `DATABASE_URL` empty. The app uses a persistent embedded PostgreSQL-compatible database at `.data/aggregator`.
+- For deployment, set `DATABASE_URL` to a PostgreSQL connection string. Production startup fails if it is missing or the database cannot be initialized.
+- Source credentials are encrypted with AES-256-GCM. Set `INTEGRATION_ENCRYPTION_KEY` to a private random secret of at least 32 characters before saving API credentials.
+- Telegram publishing uses `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHANNEL_ID`. Source failure alerts additionally require `TELEGRAM_ADMIN_CHAT_ID`. Without these values, publishing/alert requests report a configuration error.
+- The scheduler polls enabled API/RSS sources each minute when their configured cadence is due and checks source health hourly. Manual sources are ingested through the run endpoint.
+- Connector runs, including fetched/inserted counts and failures, are retained in `source_runs` and listed by `GET /runs`.
+- Formatting uses a literal, no-LLM fallback template. Category-specific copy from the referenced Post Templates document was not included in this repository.
+
+The Document 8 contract endpoints are exposed under `/api` and the existing `/api/admin/aggregator` routes remain available as compatibility/admin endpoints. Contract routes use the existing Bearer sessions: source/settings management requires an admin role, while post review, manual entries, and publish-log reads accept any authenticated persona. User management is restricted to Platform Admin.
+
+### Create and preview an API source
+
+`field_mapping` maps normalized names to JSON paths. For API responses, `records` optionally identifies the array containing items. A mapping value may also be `{ "path": "...", "transform": "strip_html|date|split_csv", "value_map": {} }`.
+
+```json
+{
+  "source_key": "example-jobs",
+  "category": "jobs",
+  "type": "api",
+  "base_url": "https://api.example.org/jobs",
+  "field_mapping": {
+    "records": "results",
+    "title": "title",
+    "org": "company.name",
+    "deadline": { "path": "apply_by", "transform": "date" },
+    "link": "url",
+    "description": { "path": "description", "transform": "strip_html" }
+  },
+  "poll_frequency_minutes": 240,
+  "enabled": false
+}
+```
+
+Create the source with `POST /api/sources`, then call `POST /api/sources/:id/preview` to inspect its real raw and mapped sample. The legacy `POST /api/admin/aggregator/sources/preview` still supports preview-before-save. Preview accepts `auth_config` transiently; saved credentials are encrypted and never returned by source APIs. API and RSS fetches require HTTPS and reject local/private-network destinations.
+
+### Ingest, review, and publish
+
+- `POST /sources/:id/run` polls an API/RSS source; for a manual source, include `{ "records": [...] }`.
+- `GET /api/admin/aggregator/records` lists normalized records. Deduplication is enforced by `(source_id, content_hash)`.
+- `GET /api/admin/aggregator/runs` lists connector execution history.
+- `GET /api/admin/aggregator/posts?status=pending` lists formatted drafts. `PATCH /api/admin/aggregator/posts/:id` with `{ "status": "approved" }` or `{ "status": "rejected" }` records a review.
+- Document 8 exposes `GET /api/posts`, `PUT /api/posts/:id`, `POST /api/posts/:id/approve`, `POST /api/posts/:id/reject`, and `POST /api/posts/bulk-approve`.
+- `POST /api/manual-entries` inserts a normalized record into the same formatting and review pipeline.
+- `POST /api/admin/aggregator/posts/:id/publish` publishes Telegram posts through the configured Bot API. For WhatsApp and community posts it records the operator's manual copy/publish confirmation; no WhatsApp automation is performed.
+- `GET /api/admin/aggregator/publish-log` lists successful publishing actions.
+- `PUT /api/admin/aggregator/publish-settings/:category` with `{ "publish_mode": "manual_approval" }` (default) or `"auto_publish"` controls automatic Telegram publication for that category.
+- `GET /api/admin/aggregator/health` reports source failures and staleness.
+- Source/category settings use `/api/sources`, `/api/categories`, and `/api/sources/health`; all contract list endpoints accept `limit` and `offset` (defaults 50 and 0) and return `total`.
+- `/api/auth/login` accepts the contract's `{ "email", "password" }` form for admin users, and `/api/auth/me` returns the authenticated user. `/api/users` supports Platform Admin user management.
+
+Scrape sources can be registered but cannot be enabled: the document's site-specific Playwright connectors and Terms of Service checks have not been completed. Do not enable scraping until the target site's terms and robots policy are verified and a reviewed connector is added.
+
+Aggregator review actor IDs are stored as text rather than user foreign keys because the existing CoursePur authentication store is in-memory and uses string IDs.

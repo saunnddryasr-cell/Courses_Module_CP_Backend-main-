@@ -9,8 +9,6 @@ export function errorHandler(err: any, _req: Request, res: Response, _next: Next
   console.error('[API Error]', err);
 
   res.status(statusCode).json({
-    status: 'error',
-    statusCode,
-    message: err.message || 'Internal server error occurred.',
+    error: err.message || 'Internal server error occurred.',
   });
 }

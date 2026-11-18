@@ -141,8 +141,23 @@ adminRouter.patch('/admin/corrections/:id', requireAdmin(['content_ops', 'platfo
   }
   item.status = req.body.status;
   if (req.body.status === 'approved') {
+    const allowedFields = new Set([
+      'title',
+      'instructor_name',
+      'description',
+      'duration_text',
+      'level',
+      'price',
+      'is_free',
+      'certificate_available',
+      'certificate_cost',
+      'language',
+      'external_url',
+      'syllabus_text',
+    ]);
+
     const course = db.courses.find((c) => c.id === item.course_id);
-    if (course && item.submitted_field in course) {
+    if (course && allowedFields.has(item.submitted_field) && item.submitted_field in course) {
       (course as any)[item.submitted_field] = item.suggested_value;
       if (!course.manually_overridden_fields.includes(item.submitted_field)) {
         course.manually_overridden_fields.push(item.submitted_field);
@@ -325,4 +340,9 @@ adminRouter.get('/admin/reports/summary', requireAdmin(['moderator', 'platform_a
     pending_claims: db.claims.filter((c) => c.status === 'pending').length,
     users: db.users.length,
   });
+});
+
+adminRouter.post('/admin/system/reset-db', requireAdmin(['platform_admin']), (_req, res) => {
+  db.reset();
+  res.json({ success: true, message: 'Database reset to the seeded baseline.' });
 });

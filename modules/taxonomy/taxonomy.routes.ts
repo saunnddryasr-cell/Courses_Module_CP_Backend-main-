@@ -31,8 +31,9 @@ taxonomyRouter.get('/prep/:slug', (req: Request, res: Response) => {
 
   const learningPaths = db.learning_paths.filter((lp) => lp.target_exam_tag_id === examTag.id && lp.is_published);
 
+  const now = new Date();
   const keyDates = db.exam_key_dates
-    .filter((d) => d.exam_tag_id === examTag.id)
+    .filter((d) => d.exam_tag_id === examTag.id && new Date(d.event_date) >= now)
     .sort((a, b) => a.event_date.localeCompare(b.event_date));
 
   res.json({

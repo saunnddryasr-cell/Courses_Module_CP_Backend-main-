@@ -64,7 +64,7 @@ coursesRouter.get('/courses/compare', (req: Request, res: Response) => {
   }
 
   const matches = db.courses
-    .filter((c) => ids.includes(c.id) || ids.includes(c.slug))
+    .filter((c) => c.ingestion_status === 'active' && (ids.includes(c.id) || ids.includes(c.slug)))
     .map((c) => {
       const prov = db.mooc_providers.find((p) => p.id === c.provider_id);
       return { ...c, provider: prov ? { id: prov.id, name: prov.name, slug: prov.slug, logo_url: prov.logo_url } : null };
@@ -75,7 +75,7 @@ coursesRouter.get('/courses/compare', (req: Request, res: Response) => {
 
 coursesRouter.get('/courses/:slug', (req: Request, res: Response) => {
   const slug = req.params.slug;
-  const course = db.courses.find((c) => c.slug === slug || c.id === slug);
+  const course = db.courses.find((c) => c.ingestion_status === 'active' && (c.slug === slug || c.id === slug));
 
   if (!course) {
     res.status(404).json({ error: 'Course not found.' });
@@ -103,6 +103,26 @@ coursesRouter.post('/courses/:id/corrections', (req: Request, res: Response) => 
   const { submitted_field, suggested_value, submitter_note } = req.body;
   if (!submitted_field || !suggested_value) {
     res.status(400).json({ error: 'submitted_field and suggested_value are required.' });
+    return;
+  }
+
+  const allowedFields = new Set([
+    'title',
+    'instructor_name',
+    'description',
+    'duration_text',
+    'level',
+    'price',
+    'is_free',
+    'certificate_available',
+    'certificate_cost',
+    'language',
+    'external_url',
+    'syllabus_text',
+  ]);
+
+  if (!allowedFields.has(submitted_field)) {
+    res.status(400).json({ error: 'submitted_field is not editable via public corrections.' });
     return;
   }
 
